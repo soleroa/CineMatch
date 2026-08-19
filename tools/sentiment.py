@@ -1,7 +1,7 @@
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 
-MODEL_NAME = "tu-usuario/movie-review-classifier"  # el nombre que le pusiste en HF Hub
+MODEL_NAME = "soleroa/movie-review-classifier"  #  nombre que le pusiste en HF Hub
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
