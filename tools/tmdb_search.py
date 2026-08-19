@@ -1,6 +1,3 @@
-# TODO: implementar búsqueda de películas contra la API de TMDb (usar TMDB_API_KEY de .env)
-
-
 import os
 import requests
 from dotenv import load_dotenv
@@ -26,5 +23,11 @@ def buscar_peliculas(genero: str = None, max_duracion: int = None, query: str = 
     
     response = requests.get(url, params=params)
     data = response.json()
-    
     return data["results"]
+
+
+if __name__ == "__main__":
+    resultados = buscar_peliculas(genero="27")  # 27 = terror
+    for peli in resultados[:5]:
+        print(peli["title"], "-", peli["release_date"])
+
