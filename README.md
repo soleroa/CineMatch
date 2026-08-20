@@ -133,11 +133,22 @@ El backend (`main.py`) expone:
 
 CORS está habilitado solo para `http://localhost:5173` (el puerto default de Vite). Si servís el frontend desde otro origen (otro puerto, un dominio de producción), hay que agregarlo a `allow_origins` en `main.py`.
 
-## Problema conocido: rate limit de Groq
+## Modelo de Groq
 
-El modelo configurado en `agent/agent.py` (`openai/gpt-oss-120b`) tiene, en el tier gratuito/on-demand de Groq, un límite de **8000 tokens por minuto**. El prompt del sistema + las tres fichas de tools + el historial de conversación pueden superar ese límite y Groq responde `413 rate_limit_exceeded`, que en la API se ve como `Internal Server Error`.
+El agente usa `openai/gpt-oss-20b` (configurado en `agent/agent.py`). Se eligió por soportar tool calling y tener un límite de tokens por minuto (TPM) más permisivo en el tier gratuito/on-demand que `openai/gpt-oss-120b`.
 
-Opciones para evitarlo:
-- Cambiar a un modelo con mayor límite de TPM en el tier gratuito (ej. `llama-3.1-8b-instant`).
-- Upgradear el tier de Groq (Dev Tier) desde [console.groq.com/settings/billing](https://console.groq.com/settings/billing).
-- Esperar a que se libere la ventana de un minuto entre pruebas seguidas.
+Si en algún momento ves `Internal Server Error` en el frontend, revisá la consola del backend:
+- **`413 rate_limit_exceeded`**: se superó el límite de TPM del tier gratuito de Groq (el prompt del sistema + las fichas de tools + el historial pueden acumular tokens rápido en conversaciones largas). Esperá un minuto entre pruebas seguidas, o upgradeá el tier desde [console.groq.com/settings/billing](https://console.groq.com/settings/billing).
+- **`404 model_not_found`**: el modelo configurado ya no está disponible en tu cuenta. Corré este snippet para ver los modelos habilitados actualmente y elegir uno con soporte de tools:
+
+  ```bash
+  python -c "
+  from groq import Groq
+  import os
+  from dotenv import load_dotenv
+  load_dotenv()
+  client = Groq(api_key=os.getenv('GROQ_API_KEY'))
+  for m in client.models.list().data:
+      print(m.id)
+  "
+  ```
