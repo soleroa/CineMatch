@@ -1,81 +1,81 @@
 # CineMatch
 
-Agente conversacional que recomienda películas usando TMDb y análisis de sentimiento de reviews, orquestado con un loop ReAct sobre Groq. El análisis de sentiment corre con un modelo propio, entrenado y publicado en Hugging Face Hub. Incluye un frontend en React (Vite) con interfaz de chat que muestra el proceso de pensamiento del agente.
+Conversational agent that recommends movies using TMDb and sentiment analysis of reviews, orchestrated with a ReAct loop over Groq. Sentiment analysis runs on a custom model, trained and published on Hugging Face Hub. Includes a React (Vite) frontend with a chat interface that shows the agent's thinking process.
 
-## Estructura
+## Structure
 
 ```
 CineMatch/
-├── .env                      # API keys (Groq, TMDb) — no se sube al repo
-├── .env.example               # plantilla de variables de entorno del backend
+├── .env                      # API keys (Groq, TMDb) — not committed to the repo
+├── .env.example               # backend environment variables template
 ├── .gitignore
 ├── requirements.txt
 ├── README.md
-├── main.py                    # entry point / API con FastAPI
+├── main.py                    # entry point / FastAPI API
 ├── agent/
 │   ├── __init__.py
-│   ├── agent.py                # loop ReAct principal (preguntar_agente)
-│   └── prompts.py               # system prompt del agente
+│   ├── agent.py                # main ReAct loop (preguntar_agente)
+│   └── prompts.py               # agent system prompt
 ├── tools/
 │   ├── __init__.py
-│   ├── tmdb_search.py            # tool: buscar películas (buscar_peliculas)
-│   ├── tmdb_reviews.py           # tool: traer reviews (obtener_reviews)
-│   └── sentiment.py               # tool: clasificador de sentiment (analizar_sentiment)
-└── frontend/                   # chat en React (Vite)
-    ├── .env.example              # plantilla de variables de entorno del frontend
+│   ├── tmdb_search.py            # tool: search movies (buscar_peliculas)
+│   ├── tmdb_reviews.py           # tool: fetch reviews (obtener_reviews)
+│   └── sentiment.py               # tool: sentiment classifier (analizar_sentiment)
+└── frontend/                   # React chat (Vite)
+    ├── .env.example              # frontend environment variables template
     ├── index.html
     └── src/
         ├── main.jsx
-        ├── App.jsx                # UI de chat, llama al endpoint /recomendar
+        ├── App.jsx                # chat UI, calls the /recomendar endpoint
         ├── App.css
-        └── index.css              # tokens de tema (claro/oscuro)
+        └── index.css              # theme tokens (light/dark)
 ```
 
-## Cómo funciona el agente
+## How the agent works
 
-`agent/agent.py` arma un loop ReAct manual con el SDK de Groq:
+`agent/agent.py` builds a manual ReAct loop with the Groq SDK:
 
-1. Manda el mensaje del usuario al modelo junto con la ficha de las tres `tools`, pidiendo `reasoning_format="parsed"` para que el modelo devuelva su razonamiento (`message.reasoning`) separado del contenido final.
-2. En cada vuelta del loop, si el modelo devolvió razonamiento, se guarda como un paso de tipo `razonamiento` en la lista `pasos`.
-3. Si el modelo responde con `tool_calls`, ejecuta la función real correspondiente (`buscar_peliculas`, `obtener_reviews` o `analizar_sentiment`), guarda un paso de tipo `tool_call` (tool, argumentos y resultado) en `pasos`, agrega el resultado a `messages` como rol `tool`, y vuelve a llamar al modelo.
-4. Cuando el modelo ya no pide más tools, devuelve `{"respuesta": ..., "pasos": [...]}`: el texto final y la traza completa de razonamiento + tool calls que llevaron a esa respuesta.
+1. Sends the user's message to the model along with the spec of the three `tools`, requesting `reasoning_format="parsed"` so the model returns its reasoning (`message.reasoning`) separate from the final content.
+2. On each loop turn, if the model returned reasoning, it's saved as a `razonamiento` (reasoning) step in the `pasos` (steps) list.
+3. If the model responds with `tool_calls`, it executes the corresponding real function (`buscar_peliculas`, `obtener_reviews`, or `analizar_sentiment`), saves a `tool_call` step (tool, arguments, and result) in `pasos`, adds the result to `messages` with role `tool`, and calls the model again.
+4. When the model no longer requests tools, it returns `{"respuesta": ..., "pasos": [...]}`: the final text and the full trace of reasoning + tool calls that led to that response.
 
-| Tool               | Función real (`tools/`)                  | Parámetros                      | Modelo que usa |
+| Tool               | Real function (`tools/`)                  | Parameters                      | Model used |
 | ------------------ | ----------------------------------------- | -------------------------------- | --------------- |
-| `buscar_peliculas` | `tmdb_search.buscar_peliculas`            | `genero` (ID numérico de TMDb)   | — (llamada directa a la API de TMDb) |
-| `obtener_reviews`  | `tmdb_reviews.obtener_reviews`            | `movie_id` (ID numérico)         | — (llamada directa a la API de TMDb) |
-| `analizar_sentiment` | `sentiment.analizar_sentiment`          | `texto`                          | `soleroa/movie-review-classifier` (propio, ver [Modelos usados](#modelos-usados)) |
+| `buscar_peliculas` | `tmdb_search.buscar_peliculas`            | `genero` (numeric TMDb ID)   | — (direct call to the TMDb API) |
+| `obtener_reviews`  | `tmdb_reviews.obtener_reviews`            | `movie_id` (numeric ID)         | — (direct call to the TMDb API) |
+| `analizar_sentiment` | `sentiment.analizar_sentiment`          | `texto`                          | `soleroa/movie-review-classifier` (custom, see [Models used](#models-used)) |
 
-El system prompt vive en `agent/prompts.py` (`SYSTEM_PROMPT`).
+The system prompt lives in `agent/prompts.py` (`SYSTEM_PROMPT`).
 
-## Proceso de pensamiento en el frontend
+## Thinking process in the frontend
 
-El backend expone la traza completa del razonamiento en `POST /recomendar`, en el campo `pasos`. Cada elemento es uno de:
+The backend exposes the full reasoning trace in `POST /recomendar`, in the `pasos` field. Each element is one of:
 
 ```jsonc
-// razonamiento del modelo antes de decidir qué hacer
+// model reasoning before deciding what to do
 { "tipo": "razonamiento", "contenido": "..." }
 
-// una tool que el agente decidió ejecutar
+// a tool the agent decided to execute
 {
   "tipo": "tool_call",
   "tool": "buscar_peliculas",
   "argumentos": { "genero": 27 },
-  "resultado": [ /* respuesta cruda de la tool */ ]
+  "resultado": [ /* raw tool response */ ]
 }
 ```
 
-En `frontend/src/App.jsx`, cada burbuja del asistente que tenga `pasos` muestra un botón colapsable **"Ver proceso de pensamiento (N)"**. Al abrirlo se lista, en orden, cada paso: el texto del razonamiento o, para las tool calls, el nombre de la tool, los argumentos con los que se llamó y el resultado crudo que devolvió. Los estilos están en `frontend/src/App.css` (clases `.proceso*`) y usan los tokens de tema de `index.css`, así que respetan modo claro/oscuro.
+In `frontend/src/App.jsx`, every assistant bubble that has `pasos` shows a collapsible **"View thinking process (N)"** button. Opening it lists, in order, each step: the reasoning text or, for tool calls, the tool name, the arguments it was called with, and the raw result it returned. The styles are in `frontend/src/App.css` (`.proceso*` classes) and use the theme tokens from `index.css`, so they respect light/dark mode.
 
 ## Setup — Backend
 
-1. Crear el entorno virtual:
+1. Create the virtual environment:
 
    ```bash
    python -m venv .venv
    ```
 
-2. Activarlo:
+2. Activate it:
 
    ```bash
    # macOS / Linux
@@ -88,19 +88,19 @@ En `frontend/src/App.jsx`, cada burbuja del asistente que tenga `pasos` muestra 
    .venv\Scripts\Activate.ps1
    ```
 
-3. Instalar las dependencias:
+3. Install dependencies:
 
    ```bash
    pip install -r requirements.txt
    ```
 
-4. Configurar las variables de entorno:
+4. Configure environment variables:
 
    ```bash
-   cp .env.example .env  # completar GROQ_API_KEY y TMDB_API_KEY
+   cp .env.example .env  # fill in GROQ_API_KEY and TMDB_API_KEY
    ```
 
-5. Para salir del entorno virtual cuando termines:
+5. To exit the virtual environment when you're done:
 
    ```bash
    deactivate
@@ -108,28 +108,28 @@ En `frontend/src/App.jsx`, cada burbuja del asistente que tenga `pasos` muestra 
 
 ## Setup — Frontend
 
-El frontend está en `frontend/`, hecho con React + Vite. Requiere Node.js instalado.
+The frontend is in `frontend/`, built with React + Vite. Requires Node.js installed.
 
-1. Instalar las dependencias:
+1. Install dependencies:
 
    ```bash
    cd frontend
    npm install
    ```
 
-2. (Opcional) configurar la URL del backend, si no vas a usar `http://localhost:8000`:
+2. (Optional) configure the backend URL, if you're not using `http://localhost:8000`:
 
    ```bash
    cp .env.example .env
-   # editar VITE_API_URL en frontend/.env
+   # edit VITE_API_URL in frontend/.env
    ```
 
 ## Run
 
-Necesitás dos terminales corriendo en simultáneo: una para el backend, otra para el frontend.
+You need two terminals running simultaneously: one for the backend, one for the frontend.
 
 ```bash
-# Terminal 1 — backend (desde la raíz del proyecto)
+# Terminal 1 — backend (from the project root)
 source .venv/bin/activate
 uvicorn main:app --reload
 # → http://localhost:8000
@@ -142,29 +142,29 @@ npm run dev
 # → http://localhost:5173
 ```
 
-Abrí `http://localhost:5173` en el navegador y chateá con CineMatch.
+Open `http://localhost:5173` in your browser and chat with CineMatch.
 
 ## API
 
-El backend (`main.py`) expone:
+The backend (`main.py`) exposes:
 
-- `GET /` — health check, devuelve `{"status": "CineMatch API funcionando"}`.
-- `POST /recomendar` — body `{"mensaje": "..."}`, devuelve `{"respuesta": "...", "pasos": [...]}`: la respuesta final del agente y la traza de razonamiento + tool calls (ver [Proceso de pensamiento en el frontend](#proceso-de-pensamiento-en-el-frontend)).
+- `GET /` — health check, returns `{"status": "CineMatch API funcionando"}`.
+- `POST /recomendar` — body `{"mensaje": "..."}`, returns `{"respuesta": "...", "pasos": [...]}`: the agent's final response and the reasoning + tool calls trace (see [Thinking process in the frontend](#thinking-process-in-the-frontend)).
 
-CORS está habilitado solo para `http://localhost:5173` (el puerto default de Vite). Si servís el frontend desde otro origen (otro puerto, un dominio de producción), hay que agregarlo a `allow_origins` en `main.py`.
+CORS is enabled only for `http://localhost:5173` (Vite's default port). If you serve the frontend from another origin (a different port, a production domain), you need to add it to `allow_origins` in `main.py`.
 
-## Modelos usados
+## Models used
 
-CineMatch usa dos modelos distintos, para dos tareas distintas:
+CineMatch uses two different models, for two different tasks:
 
-### 1. LLM orquestador (Groq)
+### 1. Orchestrator LLM (Groq)
 
-El loop ReAct de `agent/agent.py` corre sobre `qwen/qwen3.6-27b`, alojado en Groq. Es el modelo que decide qué tools llamar, en qué orden, y arma la respuesta final — y el que produce el `razonamiento` que se ve en el proceso de pensamiento del frontend (vía `reasoning_format="parsed"`).
+The ReAct loop in `agent/agent.py` runs on `qwen/qwen3.6-27b`, hosted on Groq. It's the model that decides which tools to call, in what order, and builds the final response — and the one that produces the `razonamiento` (reasoning) shown in the frontend's thinking process (via `reasoning_format="parsed"`).
 
-Si en algún momento ves `Internal Server Error` en el frontend, revisá la consola del backend:
-- **`429 rate_limit_exceeded`**: se superó el límite de tokens por minuto (TPM) del tier de Groq (el prompt del sistema + las fichas de tools + el historial + el razonamiento pueden acumular tokens rápido en conversaciones largas). Esperá unos segundos entre pruebas seguidas, o upgradeá el tier desde [console.groq.com/settings/billing](https://console.groq.com/settings/billing).
-- **`400 tool_use_failed`**: el modelo generó una llamada a tool mal formada y Groq no pudo parsearla (pasa ocasionalmente con modelos que no tienen tool calling 100% afinado). Reintentar el mensaje suele resolverlo; si es muy frecuente, considerá volver a un modelo con soporte de tools más maduro (por ejemplo `openai/gpt-oss-20b`).
-- **`404 model_not_found`**: el modelo configurado ya no está disponible en tu cuenta. Corré este snippet para ver los modelos habilitados actualmente y elegir uno con soporte de tools:
+If you ever see `Internal Server Error` in the frontend, check the backend console:
+- **`429 rate_limit_exceeded`**: the tokens-per-minute (TPM) limit for your Groq tier was exceeded (the system prompt + tool specs + history + reasoning can accumulate tokens quickly in long conversations). Wait a few seconds between consecutive tests, or upgrade your tier at [console.groq.com/settings/billing](https://console.groq.com/settings/billing).
+- **`400 tool_use_failed`**: the model generated a malformed tool call and Groq couldn't parse it (happens occasionally with models that don't have tool calling 100% fine-tuned). Retrying the message usually resolves it; if it's very frequent, consider switching back to a model with more mature tool support (e.g. `openai/gpt-oss-20b`).
+- **`404 model_not_found`**: the configured model is no longer available on your account. Run this snippet to see the models currently enabled and pick one with tool support:
 
   ```bash
   python -c "
@@ -178,11 +178,11 @@ Si en algún momento ves `Internal Server Error` en el frontend, revisá la cons
   "
   ```
 
-### 2. Clasificador de sentiment (modelo propio)
+### 2. Sentiment classifier (custom model)
 
-La tool `analizar_sentiment` (`tools/sentiment.py`) **no** llama a Groq ni a ninguna API externa de pago: corre localmente un modelo propio, entrenado y publicado en Hugging Face Hub como [`soleroa/movie-review-classifier`](https://huggingface.co/soleroa/movie-review-classifier). Se carga con `transformers` (`AutoTokenizer` + `AutoModelForSequenceClassification`) y clasifica el texto de una review como `"Positivo"` o `"Negativo"`.
+The `analizar_sentiment` tool (`tools/sentiment.py`) **does not** call Groq or any paid external API: it runs a custom model locally, trained and published on Hugging Face Hub as [`soleroa/movie-review-classifier`](https://huggingface.co/soleroa/movie-review-classifier). It's loaded with `transformers` (`AutoTokenizer` + `AutoModelForSequenceClassification`) and classifies a review's text as `"Positivo"` (Positive) or `"Negativo"` (Negative).
 
-Notas sobre este modelo:
-- Los pesos se descargan de HF Hub la primera vez que arranca el backend (import a nivel de módulo en `tools/sentiment.py`), y quedan cacheados localmente después. En ese primer arranque vas a ver logs de `Loading weights` — es esperado.
-- Si ves el warning `You are sending unauthenticated requests to the HF Hub`, es porque no configuraste `HF_TOKEN`. No es obligatorio, pero sin token la descarga es más lenta y está sujeta al rate limit anónimo de Hugging Face. Para evitarlo, generá un token en [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) y agregalo a tu `.env` como `HF_TOKEN=...`.
-- Al ser un modelo local (no una llamada HTTP a Groq), no consume tokens de Groq ni cuenta para el rate limit del LLM orquestador.
+Notes about this model:
+- The weights are downloaded from HF Hub the first time the backend starts (module-level import in `tools/sentiment.py`), and are cached locally afterward. On that first startup you'll see `Loading weights` logs — this is expected.
+- If you see the warning `You are sending unauthenticated requests to the HF Hub`, it's because you haven't configured `HF_TOKEN`. It's not required, but without a token the download is slower and subject to Hugging Face's anonymous rate limit. To avoid it, generate a token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) and add it to your `.env` as `HF_TOKEN=...`.
+- Since it's a local model (not an HTTP call to Groq), it doesn't consume Groq tokens or count toward the orchestrator LLM's rate limit.
