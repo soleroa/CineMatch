@@ -1,21 +1,21 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from agent.agent import run_agent
+from agent.agent import preguntar_agente
 
-app = FastAPI(title="CineMatch")
-
-
-class ChatRequest(BaseModel):
-    message: str
+app = FastAPI(title="CineMatch API")
 
 
-class ChatResponse(BaseModel):
-    reply: str
+class PreguntaRequest(BaseModel):
+    mensaje: str
 
 
-@app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest) -> ChatResponse:
-    # TODO: invocar run_agent(request.message) y devolver la respuesta
-    reply = run_agent(request.message)
-    return ChatResponse(reply=reply)
+@app.post("/recomendar")
+def recomendar(request: PreguntaRequest):
+    respuesta = preguntar_agente(request.mensaje)
+    return {"respuesta": respuesta}
+
+
+@app.get("/")
+def root():
+    return {"status": "CineMatch API funcionando"}
