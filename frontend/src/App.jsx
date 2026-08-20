@@ -42,7 +42,7 @@ function App() {
       const data = await res.json();
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: data.respuesta },
+        { role: "assistant", content: data.respuesta, pasos: data.pasos },
       ]);
     } catch (err) {
       setError(
@@ -66,7 +66,12 @@ function App() {
       <main className="chat">
         {messages.map((msg, i) => (
           <div key={i} className={`bubble-row ${msg.role}`}>
-            <div className="bubble">{msg.content}</div>
+            <div className="bubble-col">
+              {msg.role === "assistant" && msg.pasos?.length > 0 && (
+                <ProcesoPensamiento pasos={msg.pasos} />
+              )}
+              <div className="bubble">{msg.content}</div>
+            </div>
           </div>
         ))}
 
@@ -97,6 +102,44 @@ function App() {
           Enviar
         </button>
       </form>
+    </div>
+  );
+}
+
+function ProcesoPensamiento({ pasos }) {
+  const [abierto, setAbierto] = useState(false);
+
+  return (
+    <div className="proceso">
+      <button
+        type="button"
+        className="proceso-toggle"
+        onClick={() => setAbierto((v) => !v)}
+      >
+        {abierto ? "▾" : "▸"} Ver proceso de pensamiento ({pasos.length})
+      </button>
+
+      {abierto && (
+        <ol className="proceso-lista">
+          {pasos.map((paso, i) => (
+            <li key={i} className={`proceso-paso proceso-${paso.tipo}`}>
+              {paso.tipo === "razonamiento" ? (
+                <p>{paso.contenido}</p>
+              ) : (
+                <>
+                  <p className="proceso-tool-nombre">
+                    🔧 <code>{paso.tool}</code>(
+                    {JSON.stringify(paso.argumentos)})
+                  </p>
+                  <pre className="proceso-resultado">
+                    {JSON.stringify(paso.resultado, null, 2)}
+                  </pre>
+                </>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

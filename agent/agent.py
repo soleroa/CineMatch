@@ -22,7 +22,7 @@ tools = [
                 "type": "object",
                 "properties": {
                     "genero": {
-                        "type": "string",
+                        "type": ["string", "integer"],
                         "description": "ID numérico del género de TMDb (ej: 27 para terror)"
                     }
                 },
@@ -39,7 +39,7 @@ tools = [
                 "type": "object",
                 "properties": {
                     "movie_id": {
-                        "type": "string",
+                        "type": ["string", "integer"],
                         "description": "ID numérico de la película"
                     }
                 },
@@ -79,18 +79,26 @@ def preguntar_agente(mensaje_usuario: str):
         "analizar_sentiment": analizar_sentiment,
     }
 
+    pasos = []
+
     while True:
         response = client.chat.completions.create(
-        model="openai/gpt-oss-20b",
-        messages=messages,
-        tools=tools,
-        tool_choice="auto",
-    )
+            model="qwen/qwen3.6-27b",
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            max_tokens=600,
+            reasoning_format="parsed",
+        )
 
         respuesta = response.choices[0].message
 
+        razonamiento = getattr(respuesta, "reasoning", None)
+        if razonamiento:
+            pasos.append({"tipo": "razonamiento", "contenido": razonamiento})
+
         if not respuesta.tool_calls:
-            return respuesta.content
+            return {"respuesta": respuesta.content, "pasos": pasos}
 
         messages.append(respuesta)
 
@@ -101,6 +109,13 @@ def preguntar_agente(mensaje_usuario: str):
             funcion_real = funciones_disponibles[nombre_funcion]
             resultado = funcion_real(**argumentos)
 
+            pasos.append({
+                "tipo": "tool_call",
+                "tool": nombre_funcion,
+                "argumentos": argumentos,
+                "resultado": resultado,
+            })
+
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
@@ -109,5 +124,6 @@ def preguntar_agente(mensaje_usuario: str):
 
 # 3. NUEVO: para probarlo corriendo el archivo directo
 if __name__ == "__main__":
-    respuesta = preguntar_agente("Quiero ver una película de terror, ¿qué me recomendás?")
-    print(respuesta)
+    resultado = preguntar_agente("Quiero ver una película de terror, ¿qué me recomendás?")
+    print(resultado["respuesta"])
+    print(json.dumps(resultado["pasos"], ensure_ascii=False, indent=2))

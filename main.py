@@ -20,8 +20,8 @@ class PreguntaRequest(BaseModel):
 
 @app.post("/recomendar")
 def recomendar(request: PreguntaRequest):
-    respuesta = preguntar_agente(request.mensaje)
-    return {"respuesta": respuesta}
+    resultado = preguntar_agente(request.mensaje)
+    return {"respuesta": resultado["respuesta"], "pasos": resultado["pasos"]}
 
 
 @app.get("/")
