@@ -81,7 +81,7 @@ def preguntar_agente(mensaje_usuario: str):
 
     while True:
         response = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
+        model="openai/gpt-oss-20b",
         messages=messages,
         tools=tools,
         tool_choice="auto",
